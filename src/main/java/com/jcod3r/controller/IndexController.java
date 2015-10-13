@@ -2,6 +2,7 @@ package com.jcod3r.controller;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -49,6 +50,8 @@ public class IndexController {
         Resource resource = new ClassPathResource("17monipdb.dat");
         IP.load(resource.getFile().getAbsolutePath());
         String[] ipAddr = IP.find(ip);
+
+        System.out.println("IP-INFO: " + Arrays.toString(ipAddr));
 
         model.addAttribute("country",
             ArrayUtils.isEmpty(ipAddr) ? StringUtils.EMPTY : ipAddr[0]);
