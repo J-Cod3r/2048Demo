@@ -15,7 +15,7 @@ public final class RedisUtil {
 
     private static int TIMEOUT = 10000;
 
-    private static String PWD = "#######";
+    private static String PWD = "######";
 
     private static boolean TEST_ON_BORROW = true;
 

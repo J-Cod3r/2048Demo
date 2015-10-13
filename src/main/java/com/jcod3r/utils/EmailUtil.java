@@ -10,9 +10,9 @@ public class EmailUtil {
         SimpleEmail email = new SimpleEmail();
 
         email.setHostName("smtp.163.com");
-        email.setAuthentication("scriptboy@163.com", "yangyang");
-        email.setFrom("scriptboy@163.com");
-        email.addTo("root@jcod3r.com");
+        email.setAuthentication("######", "######");
+        email.setFrom("######");
+        email.addTo("######");
         email.setCharset("UTF-8");
         email.setSubject(subject);
         email.setMsg(msg);
