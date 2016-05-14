@@ -2,4 +2,4 @@
 
 一个简单的小练习！
 
-new branch
+new branch.
