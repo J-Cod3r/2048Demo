@@ -36,7 +36,10 @@ public class IndexController {
     public String index(Model model, HttpServletRequest request)
             throws IOException {
         // 由于使用了Nginx，所以不能简单使用request.getRemoteAddr();获得客户端IP
-        String ip = request.getHeader("x-forwarded-for");
+        String ip = request.getHeader("CF-Connecting-IP");
+        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("x-forwarded-for");
+        }
         if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
             ip = request.getHeader("Proxy-Client-IP");
         }
